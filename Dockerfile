@@ -1,17 +1,22 @@
 # Étape 1 : Utiliser une image Python légère comme base
 FROM python:3.9-slim
 
-# Étape 2 : Définir le répertoire de travail dans le conteneur
+# Étape 2 : Installer les dépendances système nécessaires
+RUN apt-get update && apt-get install -y \
+    build-essential \
+    libffi-dev \
+    libpq-dev \
+    libatlas-base-dev \
+    && rm -rf /var/lib/apt/lists/*
+
+# Étape 3 : Définir le répertoire de travail dans le conteneur
 WORKDIR /app
 
-# Étape 3 : Copier les fichiers nécessaires dans le conteneur
+# Étape 4 : Copier les fichiers nécessaires dans le conteneur
 COPY . /app
 
-# Étape 4 : Installer les dépendances Python
+# Étape 5 : Installer les dépendances Python
 RUN pip install --no-cache-dir -r requirements.txt
-
-# Étape 5 : Configurer les variables d'environnement pour la base de données
-ENV DATABASE_URL="mysql+pymysql://lophias:EqHVe0\`VFEA32zsC@hackeco-recycli:3306/recycli"
 
 # Étape 6 : Exposer le port sur lequel l'application écoutera
 EXPOSE 8080
