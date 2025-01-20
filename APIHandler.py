@@ -12,7 +12,7 @@ from passlib.context import CryptContext
 app = FastAPI()
 key = keygen.KeyGenerator()
 
-DATABASE_URL = "DATABASE_URL = "mysql+pymysql://lophias:EqHVe0`VFEA32zsC@/cloudsql/hackeco-recycli/recycli"
+DATABASE_URL = "mysql+pymysql://lophias:EqHVe0`VFEA32zsC@/cloudsql/hackeco-recycli:europe-west9-a:hackeco-recycli/recycli"
 engine = create_engine(DATABASE_URL)
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
