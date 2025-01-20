@@ -9,6 +9,9 @@ RUN apt-get update && apt-get install -y \
     libatlas-base-dev \
     && rm -rf /var/lib/apt/lists/*
 
+# Installer le client Cloud SQL (si nécessaire pour un tunnel via le proxy)
+RUN apt-get install -y google-cloud-sdk
+
 # Étape 3 : Définir le répertoire de travail dans le conteneur
 WORKDIR /app
 
@@ -22,4 +25,4 @@ RUN pip install --no-cache-dir -r requirements.txt
 EXPOSE 8080
 
 # Étape 7 : Démarrer l'application avec Uvicorn
-CMD ["uvicorn", "apihandler:app", "--host", "0.0.0.0", "--port", "8080"]
+CMD ["uvicorn", "apiHandler:app", "--host", "0.0.0.0", "--port", "8080"]
