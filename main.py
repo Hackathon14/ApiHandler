@@ -1,19 +1,22 @@
-import os
 from fastapi import FastAPI, Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
 from pydantic import BaseModel
 from sqlalchemy import create_engine, text
 from sqlalchemy.orm import sessionmaker
+import KeyGenerator as keygen
+import uvicorn
 import jwt
 import datetime
 from passlib.context import CryptContext
-from mangum import Mangum  # Pour GCF
-import uvicorn
+from fastapi.responses import HTMLResponse
+from pathlib import Path
 
-# --- Configuration de l'application ---
 app = FastAPI()
+key = keygen.KeyGenerator()
 
-DATABASE_URL = "mysql+pymysql://lophias:EqHVe0`VFEA32zsC@/cloudsql/hackeco-recycli:europe-west9-a:hackeco-recycli/recycli"
+# DATABASE_URL = "mysql://savrbsxwsm:96ZBvOnGP$FvZGVJ@fastapiresmarteco-server:3306/fastapiresmarteco-database"
+DATABASE_URL = "mysql+pymysql://savrbsxwsm:96ZBvOnGP$FvZGVJ@fastapiresmarteco-server:3306/fastapiresmarteco-database"
+
 engine = create_engine(DATABASE_URL)
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
@@ -25,38 +28,35 @@ def get_db():
         db.close()
 
 # JWT settings
-SECRET_KEY = "mysecretkey"  # Remplacez par une clé sécurisée (via variable d'environnement si possible)
+SECRET_KEY = key.get_symmetric_key()
 ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_MINUTES = 30
 
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="token")
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
-# --- Modèles Pydantic ---
 class Token(BaseModel):
     access_token: str
     token_type: str
 
+class TokenData(BaseModel):
+    username: str | None = None
+
 class User(BaseModel):
-    id: int
-    nom: str
-    prenom: str
-    email: str
-    role: str
-
-class RegisterUser(BaseModel):
-    nom: str
-    prenom: str
-    email: str
+    username: str
     password: str
-    commune_id: int
+    email: str | None = None
+    ville: str
 
-# --- JWT Helper ---
 def create_access_token(data: dict, expires_delta: datetime.timedelta | None = None):
     to_encode = data.copy()
-    expire = datetime.datetime.utcnow() + (expires_delta or datetime.timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES))
+    if expires_delta:
+        expire = datetime.datetime.utcnow() + expires_delta
+    else:
+        expire = datetime.datetime.utcnow() + datetime.timedelta(minutes=30)
     to_encode.update({"exp": expire})
-    return jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
+    encoded_jwt = jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
+    return encoded_jwt
 
 def verify_password(plain_password, hashed_password):
     return pwd_context.verify(plain_password, hashed_password)
@@ -64,57 +64,65 @@ def verify_password(plain_password, hashed_password):
 def get_password_hash(password):
     return pwd_context.hash(password)
 
-# --- Routes FastAPI ---
+# routes
+
 @app.post("/token", response_model=Token)
-async def login_for_access_token(form_data: OAuth2PasswordRequestForm = Depends(), db: SessionLocal = Depends(get_db)):
-    user = db.execute(
-        text("SELECT * FROM utilisateurs WHERE email = :email"),
-        {"email": form_data.username}
-    ).fetchone()
+async def login_for_access_token(form_data: OAuth2PasswordRequestForm = Depends(), db: SessionLocal = Depends(get_db)): # type: ignore
+    user = db.execute(text("SELECT * FROM users WHERE username = :username"), {"username": form_data.username}).fetchone()
     if not user or not verify_password(form_data.password, user.password):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Incorrect email or password",
+            detail="Incorrect username or password",
             headers={"WWW-Authenticate": "Bearer"},
         )
-    access_token = create_access_token(data={"sub": user.email, "role": user.role})
+    access_token_expires = datetime.timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
+    access_token = create_access_token(
+        data={"sub": form_data.username}, expires_delta=access_token_expires
+    )
     return {"access_token": access_token, "token_type": "bearer"}
 
-@app.post("/register")
-async def register_user(user: RegisterUser, db: SessionLocal = Depends(get_db)):
+@app.post("/register", response_model=Token)
+async def register(user: User, db: SessionLocal = Depends(get_db)): #type: ignore
     hashed_password = get_password_hash(user.password)
-    db.execute(
-        text("INSERT INTO utilisateurs (nom, prenom, email, password, commune_id, role) VALUES (:nom, :prenom, :email, :password, :commune_id, :role)"),
-        {"nom": user.nom, "prenom": user.prenom, "email": user.email, "password": hashed_password, "commune_id": user.commune_id, "role": "user"}
-    )
+    db.execute(text("INSERT INTO users (username, password, email, ville) VALUES (:username, :password, :email, :ville)"), {"username": user.username, "password": hashed_password, "email": user.email, "ville": user.ville})
     db.commit()
-    return {"message": "User registered successfully"}
+    access_token_expires = datetime.timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
+    access_token = create_access_token(
+        data={"sub": user.username}, expires_delta=access_token_expires
+    )
+    return {"access_token": access_token, "token_type": "bearer"}
 
-@app.get("/users/{id}", response_model=User)
-async def get_user_by_id(id: int, db: SessionLocal = Depends(get_db)):
-    user = db.execute(
-        text("SELECT id, nom, prenom, email, role FROM utilisateurs WHERE id = :id"),
-        {"id": id}
-    ).fetchone()
+@app.get("/users/{username}", response_model=User)
+async def get_user(username: str, db: SessionLocal = Depends(get_db)):#type: ignore
+    user = db.execute(text("SELECT username, email, ville FROM users WHERE username = :username"), {"username": username}).fetchone()
     if not user:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="User not found",
         )
-    return {"id": user.id, "nom": user.nom, "prenom": user.prenom, "email": user.email, "role": user.role}
+    return {"username": user.username, "email": user.email, "ville": user.ville}
 
-@app.get("/communes")
-async def get_communes(db: SessionLocal = Depends(get_db)):
-    communes = db.execute(text("SELECT * FROM commune")).fetchall()
-    return {"communes": [dict(row) for row in communes]}
+@app.get("/data")
+async def read_data(token: str = Depends(oauth2_scheme)):
+    # Dummy data passthrough, replace with actual data fetching logic
+    with engine.connect() as connection:
+        result = connection.execute(text("SELECT * FROM your_table"))
+        data = result.fetchall()
+    return {"data": data}
 
-@app.get("/scans/{user_id}")
-async def get_scans_for_user(user_id: int, db: SessionLocal = Depends(get_db)):
-    scans = db.execute(
-        text("SELECT * FROM scans WHERE utilisateur_id = :user_id"),
-        {"user_id": user_id}
-    ).fetchall()
-    return {"scans": [dict(row) for row in scans]}
 
-# --- Point d'entrée pour GCF ---
-handler = Mangum(app)
+
+
+
+
+
+
+
+
+@app.get("/", response_class=HTMLResponse)
+async def read_html_file():
+    # Lire le contenu du fichier HTML
+    file_path = Path("templates/index.html")
+    if file_path.exists():
+        return HTMLResponse(content=file_path.read_text(), status_code=200)
+    return HTMLResponse(content="<h1>Fichier HTML non trouvé</h1>", status_code=404)
