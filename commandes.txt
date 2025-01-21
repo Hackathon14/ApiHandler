@@ -1,0 +1,8 @@
+# demarrer l'environnement virtuel
+source venv/bin/activate
+
+# Intallation des dependances
+pip install -r requirements.txt
+
+# Demmarer le server local
+uvicorn main:app --reload
