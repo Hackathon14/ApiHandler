@@ -35,14 +35,17 @@ class Token(BaseModel):
     access_token: str
     token_type: str
 
-class TokenData(BaseModel):
-    username: str | None = None
-
 class User(BaseModel):
     username: str
     password: str
     email: str | None = None
     ville: str
+    
+class Scan(BaseModel):
+    producname: str
+    emprunt_carborne: str
+    packagin: str
+    image: str
 
 def create_access_token(data: dict, expires_delta: datetime.timedelta | None = None):
     to_encode = data.copy()
@@ -98,6 +101,13 @@ async def get_user(username: str, db: SessionLocal = Depends(get_db)):#type: ign
         )
     return {"username": user.username, "email": user.email, "ville": user.ville}
 
+@app.post("/scans", response_model=Scan)
+async def create_scan(scan: Scan, token: str = Depends(oauth2_scheme), db: SessionLocal = Depends(get_db)): # type: ignore
+    db.execute(text("INSERT INTO scans (producname, emprunt_carborne, packagin, image) VALUES (:producname, :emprunt_carborne, :packagin, :image)"), 
+                {"producname": scan.producname, "emprunt_carborne": scan.emprunt_carborne, "packagin": scan.packagin, "image": scan.image})
+    db.commit()
+    return scan
+
 @app.get("/data")
 async def read_data(token: str = Depends(oauth2_scheme)):
     # Dummy data passthrough, replace with actual data fetching logic
@@ -105,6 +115,4 @@ async def read_data(token: str = Depends(oauth2_scheme)):
         result = connection.execute(text("SELECT * FROM your_table"))
         data = result.fetchall()
     return {"data": data}
-
-
 
