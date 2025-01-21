@@ -1,3 +1,4 @@
+import os
 from fastapi import FastAPI, Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
 from pydantic import BaseModel
@@ -7,6 +8,7 @@ import jwt
 import datetime
 from passlib.context import CryptContext
 from mangum import Mangum  # Pour GCF
+import uvicorn
 
 # --- Configuration de l'application ---
 app = FastAPI()
@@ -23,7 +25,7 @@ def get_db():
         db.close()
 
 # JWT settings
-SECRET_KEY = "mysecretkey"  # Remplace par une clé sécurisée
+SECRET_KEY = "mysecretkey"  # Remplacez par une clé sécurisée (via variable d'environnement si possible)
 ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_MINUTES = 30
 
@@ -116,5 +118,3 @@ async def get_scans_for_user(user_id: int, db: SessionLocal = Depends(get_db)):
 
 # --- Point d'entrée pour GCF ---
 handler = Mangum(app)
-
-
