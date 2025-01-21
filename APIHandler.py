@@ -36,16 +36,19 @@ class Token(BaseModel):
     token_type: str
 
 class User(BaseModel):
+    utilisateur_id: int
     username: str
     password: str
     email: str | None = None
-    ville: str
+    commune_id: str
     
 class Scan(BaseModel):
-    producname: str
-    emprunt_carborne: str
-    packagin: str
-    image: str
+    meta_data: str
+    produit_nom: str
+    produit_emprunt_co2: str
+    code_barre: str
+    utilisateur_id: int
+    
 
 def create_access_token(data: dict, expires_delta: datetime.timedelta | None = None):
     to_encode = data.copy()
@@ -65,7 +68,7 @@ def get_password_hash(password):
 
 # routes
 
-@app.post("/token", response_model=Token)
+@app.post("/login", response_model=Token)
 async def login_for_access_token(form_data: OAuth2PasswordRequestForm = Depends(), db: SessionLocal = Depends(get_db)): # type: ignore
     user = db.execute(text("SELECT * FROM users WHERE username = :username"), {"username": form_data.username}).fetchone()
     if not user or not verify_password(form_data.password, user.password):
@@ -83,7 +86,7 @@ async def login_for_access_token(form_data: OAuth2PasswordRequestForm = Depends(
 @app.post("/register", response_model=Token)
 async def register(user: User, db: SessionLocal = Depends(get_db)): #type: ignore
     hashed_password = get_password_hash(user.password)
-    db.execute(text("INSERT INTO users (username, password, email, ville) VALUES (:username, :password, :email, :ville)"), {"username": user.username, "password": hashed_password, "email": user.email, "ville": user.ville})
+    db.execute(text("INSERT INTO users (username, password, email, commune_id) VALUES (:username, :password, :email, :commune_id)"), {"username": user.username, "password": hashed_password, "email": user.email, "commune_id": user.commune_id})
     db.commit()
     access_token_expires = datetime.timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
     access_token = create_access_token(
@@ -93,13 +96,23 @@ async def register(user: User, db: SessionLocal = Depends(get_db)): #type: ignor
 
 @app.get("/users/{username}", response_model=User)
 async def get_user(username: str, db: SessionLocal = Depends(get_db)):#type: ignore
-    user = db.execute(text("SELECT username, email, ville FROM users WHERE username = :username"), {"username": username}).fetchone()
+    user = db.execute(text("SELECT username, email, commune_id FROM users WHERE username = :username"), {"username": username}).fetchone()
     if not user:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="User not found",
         )
-    return {"username": user.username, "email": user.email, "ville": user.ville}
+    return {"username": user.username, "email": user.email, "commune_id": user.commune_id}
+
+@app.get("/scan/{scan_id}", response_model=Scan)
+async def get_scan(scan_id: str, db: SessionLocal = Depends(get_db)):#type: ignore
+    scan = db.execute(text("SELECT produit_nom, produit_emprunt_co2, meta_data, utilisateur_id, code_barre FROM scans WHERE id = :scan_id"), {"scan_id": scan_id}).fetchone()
+    if not scan:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="User not found",
+        )
+    return {"produit_nom": scan.produit_nom, "produit_emprunt_co2": scan.produit_emprunt_co2, "meta_data": scan.meta_data, "utilisateur_id": scan.utilisateur_id, "code_barre": scan.code_barre}
 
 @app.post("/scans", response_model=Scan)
 async def create_scan(scan: Scan, token: str = Depends(oauth2_scheme), db: SessionLocal = Depends(get_db)): # type: ignore
@@ -116,16 +129,8 @@ async def create_scan(scan: Scan, token: str = Depends(oauth2_scheme), db: Sessi
             status_code=status.HTTP_404_NOT_FOUND,
             detail="User not found",
         )
-    db.execute(text("INSERT INTO scans (producname, emprunt_carborne, packagin, image, user_id) VALUES (:producname, :emprunt_carborne, :packagin, :image, :user_id)"), 
-                {"producname": scan.producname, "emprunt_carborne": scan.emprunt_carborne, "packagin": scan.packagin, "image": scan.image, "user_id": user_id.id})
+    db.execute(text("INSERT INTO scans (produit_nom, produit_emprunt_co2, meta_data, utilisateur_id, code_barre) VALUES (:produit_nom, :produit_emprunt_co2, :meta_data, :utilisateur_id, :code_barre)"), 
+                {"produit_nom": scan.produit_nom, "produit_emprunt_co2": scan.produit_emprunt_co2, "meta_data": scan.meta_data, "utilisateur_id": scan.utilisateur_id, "code_barre": scan.code_barre})
     db.commit()
     return scan
-
-@app.get("/data")
-async def read_data(token: str = Depends(oauth2_scheme)):
-    # Dummy data passthrough, replace with actual data fetching logic
-    with engine.connect() as connection:
-        result = connection.execute(text("SELECT * FROM your_table"))
-        data = result.fetchall()
-    return {"data": data}
 
