@@ -103,8 +103,21 @@ async def get_user(username: str, db: SessionLocal = Depends(get_db)):#type: ign
 
 @app.post("/scans", response_model=Scan)
 async def create_scan(scan: Scan, token: str = Depends(oauth2_scheme), db: SessionLocal = Depends(get_db)): # type: ignore
-    db.execute(text("INSERT INTO scans (producname, emprunt_carborne, packagin, image) VALUES (:producname, :emprunt_carborne, :packagin, :image)"), 
-                {"producname": scan.producname, "emprunt_carborne": scan.emprunt_carborne, "packagin": scan.packagin, "image": scan.image})
+    payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+    username: str = payload.get("sub")
+    if username is None:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid authentication credentials",
+        )
+    user_id = db.execute(text("SELECT id FROM users WHERE username = :username"), {"username": username}).fetchone()
+    if user_id is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="User not found",
+        )
+    db.execute(text("INSERT INTO scans (producname, emprunt_carborne, packagin, image, user_id) VALUES (:producname, :emprunt_carborne, :packagin, :image, :user_id)"), 
+                {"producname": scan.producname, "emprunt_carborne": scan.emprunt_carborne, "packagin": scan.packagin, "image": scan.image, "user_id": user_id.id})
     db.commit()
     return scan
 
