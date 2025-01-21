@@ -15,7 +15,8 @@ app = FastAPI()
 key = keygen.KeyGenerator()
 
 # DATABASE_URL = "mysql://savrbsxwsm:96ZBvOnGP$FvZGVJ@fastapiresmarteco-server:3306/fastapiresmarteco-database"
-DATABASE_URL = "mysql+pymysql://savrbsxwsm:96ZBvOnGP$FvZGVJ@fastapiresmarteco-server:3306/fastapiresmarteco-database"
+DATABASE_URL = "mysql+pymysql://u425187614_hackaton:Hackaton2025@srv516.hstgr.io:3306/u425187614_hackaton"
+
 
 engine = create_engine(DATABASE_URL)
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
