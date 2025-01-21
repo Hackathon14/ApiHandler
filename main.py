@@ -8,8 +8,6 @@ import uvicorn
 import jwt
 import datetime
 from passlib.context import CryptContext
-from fastapi.responses import HTMLResponse
-from pathlib import Path
 
 app = FastAPI()
 key = keygen.KeyGenerator()
@@ -40,14 +38,22 @@ class Token(BaseModel):
     access_token: str
     token_type: str
 
-class TokenData(BaseModel):
-    username: str | None = None
-
 class User(BaseModel):
     username: str
     password: str
-    email: str | None = None
+    email: str
     ville: str
+
+    def __init__(self, password, ville, email):
+        self.email = email
+        self.password = password
+        self.ville = ville
+
+class Scan(BaseModel):
+    producname: str
+    emprunt_carborne: str
+    packagin: str
+    image: str
 
 def create_access_token(data: dict, expires_delta: datetime.timedelta | None = None):
     to_encode = data.copy()
@@ -69,8 +75,11 @@ def get_password_hash(password):
 
 @app.post("/token", response_model=Token)
 async def login_for_access_token(form_data: OAuth2PasswordRequestForm = Depends(), db: SessionLocal = Depends(get_db)): # type: ignore
-    user = db.execute(text("SELECT * FROM users WHERE username = :username"), {"username": form_data.username}).fetchone()
-    if not user or not verify_password(form_data.password, user.password):
+    print("Login for access token");
+    my_user = db.execute(text("SELECT * FROM utilisateurs WHERE email = :username"), {"username": form_data.username}).fetchone()
+    # user = User(my_user['email'], my_user['pass'], my_user['commune']);
+
+    if not verify_password(form_data.password, my_user[6]):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Incorrect username or password",
@@ -103,6 +112,26 @@ async def get_user(username: str, db: SessionLocal = Depends(get_db)):#type: ign
         )
     return {"username": user.username, "email": user.email, "ville": user.ville}
 
+@app.post("/scans", response_model=Scan)
+async def create_scan(scan: Scan, token: str = Depends(oauth2_scheme), db: SessionLocal = Depends(get_db)): # type: ignore
+    payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+    username: str = payload.get("sub")
+    if username is None:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid authentication credentials",
+        )
+    user_id = db.execute(text("SELECT id FROM users WHERE username = :username"), {"username": username}).fetchone()
+    if user_id is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="User not found",
+        )
+    db.execute(text("INSERT INTO scans (producname, emprunt_carborne, packagin, image, user_id) VALUES (:producname, :emprunt_carborne, :packagin, :image, :user_id)"), 
+                {"producname": scan.producname, "emprunt_carborne": scan.emprunt_carborne, "packagin": scan.packagin, "image": scan.image, "user_id": user_id.id})
+    db.commit()
+    return scan
+
 @app.get("/data")
 async def read_data(token: str = Depends(oauth2_scheme)):
     # Dummy data passthrough, replace with actual data fetching logic
@@ -111,19 +140,3 @@ async def read_data(token: str = Depends(oauth2_scheme)):
         data = result.fetchall()
     return {"data": data}
 
-
-
-
-
-
-
-
-
-
-@app.get("/", response_class=HTMLResponse)
-async def read_html_file():
-    # Lire le contenu du fichier HTML
-    file_path = Path("templates/index.html")
-    if file_path.exists():
-        return HTMLResponse(content=file_path.read_text(), status_code=200)
-    return HTMLResponse(content="<h1>Fichier HTML non trouvé</h1>", status_code=404)
