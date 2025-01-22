@@ -12,9 +12,18 @@ import jwt
 import datetime
 from passlib.context import CryptContext
 from pathlib import Path
+from fastapi.middleware.cors import CORSMiddleware
 
 app = FastAPI()
 key = keygen.KeyGenerator()
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 DATABASE_URL = "mysql+pymysql://u425187614_hackaton:Hackaton2025@srv516.hstgr.io:3306/u425187614_hackaton"
 engine = create_engine(
